@@ -40,7 +40,7 @@ class ProfileForm(messages.Message):
     displayName = messages.StringField(1)
     mainEmail = messages.StringField(2)
     teeShirtSize = messages.EnumField('TeeShirtSize', 3)
-    conferenceKeysToAttend = messages.StringField(4, repeated=True)
+    conferenceKeysToAttend = messages.StringField(4, repeated=False)
 
 class StringMessage(messages.Message):
     """StringMessage-- outbound (single) string message"""
@@ -53,21 +53,20 @@ class BooleanMessage(messages.Message):
 class Conference(ndb.Model):
     """Conference -- Conference object"""
     name            = ndb.StringProperty(required=True)
-    description     = ndb.StringProperty()
+    description     = ndb.StringProperty(indexed=False)
     organizerUserId = ndb.StringProperty()
     topics          = ndb.StringProperty(repeated=True)
     city            = ndb.StringProperty()
     startDate       = ndb.DateProperty()
-    month           = ndb.IntegerProperty() # TODO: do we need for indexing like Java?
+    month           = ndb.IntegerProperty()
     endDate         = ndb.DateProperty()
     maxAttendees    = ndb.IntegerProperty()
     seatsAvailable  = ndb.IntegerProperty()
-    #sessions        = ndb.StringProperty(repeated=True)
 
 
 class Speaker(ndb.Model):
-    #speaker name is in key
-    sessionKeysToAttend= ndb.StringProperty(repeated=True)
+    name = ndb.StringProperty(indexed=False)
+    sessionKeysToAttend= ndb.StringProperty(repeated=True, indexed=False)
 
 class SpeakerRegistrationForm(messages.Message):
     name            = messages.StringField(1, required=True)
@@ -77,13 +76,12 @@ class FeaturedSpeakerForm(messages.Message):
     sessions        = messages.StringField(2, repeated=True)
 
 class Session(ndb.Model):
-    name            = ndb.StringProperty(required=True)
-    startTime       = ndb.TimeProperty()
-    speaker         = ndb.StringProperty(required=True)
-    duration        = ndb.FloatProperty()
-    typeOfSession   = ndb.StringProperty()
-    date            = ndb.DateProperty()
-    websafeKey      = ndb.StringProperty()
+    name            = ndb.StringProperty(required=True, indexed=False)
+    startTime       = ndb.TimeProperty(indexed=False)
+    speaker         = ndb.StringProperty(required=True, indexed=False)
+    duration        = ndb.FloatProperty(indexed=False)
+    typeOfSession   = ndb.StringProperty(required=True)
+    date            = ndb.DateProperty(indexed=False)
 class SessionForm(messages.Message):
     name            = messages.StringField(1)
     startTime       = messages.StringField(2)

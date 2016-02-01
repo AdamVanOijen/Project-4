@@ -1,32 +1,19 @@
-App Engine application for the Udacity training course.
+Project 4 Conference Central application
 
-## Products
-- [App Engine][1]
+To Run This Application Locally:
 
-## Language
-- [Python][2]
+	- download python google app engine SDK from here: https://cloud.google.com/appengine/downloads?hl=en
+	- run python2.7 path/to/google_appengine/appcfg.py path/to/ConferenceCentral_Complete
+	- go to http://localhost:8080 from your web browser
 
-## APIs
-- [Google Cloud Endpoints][3]
+To Run the Uploaded Version of This App:
 
-## Setup Instructions
-1. Update the value of `application` in `app.yaml` to the app ID you
-   have registered in the App Engine admin console and would like to use to host
-   your instance of this sample.
-1. Update the values at the top of `settings.py` to
-   reflect the respective client IDs you have registered in the
-   [Developer Console][4].
-1. Update the value of CLIENT_ID in `static/js/app.js` to the Web client ID
-1. (Optional) Mark the configuration files as unchanged as follows:
-   `$ git update-index --assume-unchanged app.yaml settings.py static/js/app.js`
-1. Run the app with the devserver using `dev_appserver.py DIR`, and ensure it's running by visiting your local server's address (by default [localhost:8080][5].)
-1. (Optional) Generate your client library(ies) with [the endpoints tool][6].
-1. Deploy your application.
+	- go to conference-1124.appspot.com/_ah/api/explorer
 
+Notes:
+	- you must run getProfile before running createConference.
+	- a Speaker must be registered via registerSpeaker before creating a session 
 
-[1]: https://developers.google.com/appengine
-[2]: http://python.org
-[3]: https://developers.google.com/appengine/docs/python/endpoints/
-[4]: https://console.developers.google.com/
-[5]: https://localhost:8080/
-[6]: https://developers.google.com/appengine/docs/python/endpoints/endpoints_tool
+Design Decisions:
+	 
+	 I chose to store corresponding session keys in a speaker entity because it allows me to query corresponding sessions by their key directly. Querying sessions by their key means I can use less indexes in my application.
