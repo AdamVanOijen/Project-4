@@ -63,12 +63,7 @@ class Conference(ndb.Model):
     maxAttendees    = ndb.IntegerProperty()
     seatsAvailable  = ndb.IntegerProperty()
 
-
-class Speaker(ndb.Model):
-    name = ndb.StringProperty(indexed=False)
-    sessionKeysToAttend= ndb.StringProperty(repeated=True, indexed=False)
-
-class SpeakerRegistrationForm(messages.Message):
+class SpeakerNameForm(messages.Message):
     name            = messages.StringField(1, required=True)
 
 class FeaturedSpeakerForm(messages.Message):
@@ -76,20 +71,22 @@ class FeaturedSpeakerForm(messages.Message):
     sessions        = messages.StringField(2, repeated=True)
 
 class Session(ndb.Model):
-    name            = ndb.StringProperty(required=True, indexed=False)
-    startTime       = ndb.TimeProperty(indexed=False)
-    speaker         = ndb.StringProperty(required=True, indexed=False)
+    name            = ndb.StringProperty(required=True)
+    startTime       = ndb.TimeProperty(required=True)
+    speaker         = ndb.StringProperty(required=True)
     duration        = ndb.FloatProperty(indexed=False)
     typeOfSession   = ndb.StringProperty(required=True)
-    date            = ndb.DateProperty(indexed=False)
+    date            = ndb.DateProperty(required=True)
+    highlights      = ndb.StringProperty(indexed=False)
 class SessionForm(messages.Message):
     name            = messages.StringField(1)
-    startTime       = messages.StringField(2)
+    startTime       = messages.StringField(2, required=True)
     speaker         = messages.StringField(3, required=True)
     duration        = messages.FloatField(4)#in hours
-    typeOfSession   = messages.StringField(5)
-    date            = messages.StringField(6)
-    websafeKey      = messages.StringField(7)
+    typeOfSession   = messages.StringField(5, required=True)
+    date            = messages.StringField(6, required=True)
+    highlights      = messages.StringField(7)
+    websafeKey      = messages.StringField(8)
 
 class SessionForms(messages.Message):
     sessions = messages.MessageField(SessionForm, 1, repeated = True)
@@ -143,3 +140,11 @@ class ConferenceQueryForms(messages.Message):
 
 class SessionQueryForm(messages.Message):
     typeOfSession = messages.StringField(1, required=True)
+
+class SessionTimeQueryForm(messages.Message):
+    maxTime       = messages.StringField(1)
+    minTime       = messages.StringField(2)
+
+class SessionDateQueryForm(messages.Message):
+    maxDate       = messages.StringField(1)
+    minDate       = messages.StringField(2)

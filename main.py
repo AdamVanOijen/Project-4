@@ -41,7 +41,6 @@ class SendConfirmationEmailHandler(webapp2.RequestHandler):
 
 class CacheSpeaker(webapp2.RequestHandler):
     def post(self):
-        print "ENTERED"
         ConferenceApi._cacheSpeaker(self.request.get('speaker'))
 
 

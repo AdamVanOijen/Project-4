@@ -41,9 +41,10 @@ from models import Session
 from models import SessionForm
 from models import SessionForms
 from models import SessionQueryForm
-from models import Speaker
-from models import SpeakerRegistrationForm
 from models import FeaturedSpeakerForm
+from models import SpeakerNameForm
+from models import SessionTimeQueryForm
+from models import SessionDateQueryForm
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -105,7 +106,7 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
 
 MODIFY_SESSION_WHISHLIST_FORM = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    websafeConferenceKey=messages.StringField(1)
+    websafeSessionKey=messages.StringField(1)
     )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -187,17 +188,6 @@ class ConferenceApi(remote.Service):
         )
         return request
 
-
-    def _registerSpeakerProfile(self, request):
-        """creates a 'Speaker' entity"""
-        speaker_key =ndb.Key(Speaker, request.name)
-        speaker = Speaker(key=speaker_key, name=request.name)
-        speaker.put()
-
-        response = StringMessage(data = "Speaker successfully registered!")
-        return response
-
-
     def _createSessionObject(self, request):
         """Creates a new 'Session' entity in the database, from the request form
         and adds '_cacheSpeaker' method to the taskque if a speaker attends more than one session"""
@@ -216,26 +206,26 @@ class ConferenceApi(remote.Service):
 
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
         data['key'] = s_key #key is a default property of any ndb entity
-        data['date'] = datetime.strptime(data['date'], "%Y-%m-%d")
-        data['startTime'] = datetime.time(datetime.strptime(data['startTime'], "%H:%M:%S"))
-        if data['speaker']:
-            #if the specified speaker is registered, add the session to the speaker's 'sessionKeysToAttend'
-            try:
-                speaker=ndb.Key(Speaker, request.speaker).get()
-                speaker.sessionKeysToAttend.append(s_key.urlsafe())
-                speaker.put()
-            except:
-                raise endpoints.BadRequestException('No such speaker registered')
-        else:
-            raise endpoints.BadRequestException('speaker field must be filled out.')
+        if data['date']:
+            data['date'] = datetime.strptime(data['date'], "%Y-%m-%d")
+        if data['startTime']:
+            data['startTime'] = datetime.time(datetime.strptime(data['startTime'], "%H:%M:%S"))
+        del data['websafeKey']
         del data['websafeConferenceKey']
+
+        if not data['speaker']:
+            raise endpoints.BadRequestException('speaker field must be filled out.')
+
         Session(**data).put()
 
         #adds speaker name and corresponding session names to memcache if speaker
-        #features in more than one session -- via the CacheSpeaker handler.
-        speaker= ndb.Key(Speaker, data['speaker']).get()
-        if len(speaker.sessionKeysToAttend) > 1:
-            taskqueue.add(params={'speaker': speaker.key.urlsafe()},
+        #features in more than one session in a conference -- via the CacheSpeaker handler.
+
+        seshs = Session.query(ancestor=confKey)
+        seshs = seshs.filter(Session.speaker==data['speaker'])
+
+        if seshs.count() > 1:
+            taskqueue.add(params={'speaker': data['speaker']},
                 url='/tasks/cache_speaker/'
             )
 
@@ -249,16 +239,50 @@ class ConferenceApi(remote.Service):
         confKey=ndb.Key(urlsafe=wsck)#reconstructing conference key from encrypted key
         conf=confKey.get()
 
+        seshs=Session.query(ancestor=confKey)
         if hasattr(request, 'typeOfSession'):
-            q = Session.query(Session.typeOfSession == request.typeOfSession)
+            q = seshs.filter(Session.typeOfSession == request.typeOfSession)
             form = SessionForms(sessions = 
                 [self._copySessionToForm(sesh) for sesh in q])
         else:   
-            seshs=Session.query(ancestor=confKey)
             form = SessionForms(sessions = 
                 [self._copySessionToForm(sesh) for sesh in seshs])
-            
+
         return form
+
+    def _querySesssionsBySpeaker(self, request):
+        "retrieves all sessions with a specified speaker property and returns them in Session Forms"
+        spkr=memcache.get('verySecureKey')
+        if request.name == spkr.get('speaker'):
+            response = FeaturedSpeakerForm(name=spkr.get('speaker'), sessions=spkr.get('sessions'))
+        else:
+            seshs = Session.query(Session.speaker==request.name)
+            seshs = [index.name for index in seshs]
+            response = FeaturedSpeakerForm(name=request.name, sessions=seshs)
+
+        return response
+
+    def _querySessionsByTime(self, request):
+        "retrieves all sessions between 2 given times and returns them in sessionForms"
+        maxTime = datetime.time(datetime.strptime(request.maxTime, "%H:%M:%S"))
+        minTime = datetime.time(datetime.strptime(request.minTime, "%H:%M:%S"))
+        #maxTime = datetime.strptime(request.maxTime, "%H:%M:%S")
+        #minTime = datetime.strptime(request.minTime, "%H:%M:%S")
+
+        seshs=Session.query()
+        seshs=seshs.filter(Session.startTime > minTime)
+        seshs=seshs.filter(Session.startTime < maxTime)
+
+        return SessionForms(sessions = [self._copySessionToForm(index) for index in seshs])
+
+    def _querySessionsByDate(self, request):
+        "retrieves all sessions between 2 given dates and returns them in sessionForms"
+        maxDate = datetime.strptime(request.maxDate, "%Y-%m-%d")
+        minDate = datetime.strptime(request.minDate, "%Y-%m-%d")
+
+        seshs = Session.query(ndb.AND(Session.date > minDate, Session.date < maxDate ))
+
+        return SessionForms(sessions = [self._copySessionToForm(index) for index in seshs])
 
     def _copySessionToForm(self, session):
         """copies data from a session entity to a session form and returns it"""
@@ -272,41 +296,47 @@ class ConferenceApi(remote.Service):
                 elif field.name == 'date':
                     #converts field to string if it is of either types
                     setattr(sf, field.name, unicode(getattr(session, field.name)))
-
-                elif field.name == 'websafeKey':
-                    #storing the session's key as an encrypted urlsafe key
-                    setattr(sf, field.name, session.key.urlsafe())
+  
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
+
+            #storing the session's key as an encrypted urlsafe key
+            sf.websafeKey = session.key.urlsafe()
         return sf
 
     def _modifyUserWishlist(self, request, http_method):
         """appends a urlsafe session key to 'sessionKeysWishlist' property in the user's Profile 
         entity, or deletes it."""
-        seshKey= request.websafeConferenceKey
+        seshKey= request.websafeSessionKey
         prof = self._getProfileFromUser()
 
         if http_method == 'POST':
             if not seshKey in prof.sessionKeysWishlist:
                 prof.sessionKeysWishlist.append(seshKey)
-            else:
+                response = StringMessage(data = "Session successfully added to your wishlist!")
+
+            if not ndb.Key(urlsafe=seshKey).kind() == "Session":
+                raise endpoints.BadRequestException('key is not valid or is not of Session type')
+
+            elif seshKey in prof.sessionKeysWishlist:
                 raise endpoints.BadRequestException('This session is already in your wishlist')
 
         elif http_method =='DELETE':
 
-            copy = []
-            [copy.append(index) for index in \
-                prof.sessionKeysWishlist if not index == seshKey]
-            prof.sessionKeysWishlist = copy
+            if seshKey in prof.sessionKeysWishlist:
+                prof.sessionKeysWishlist.remove(seshKey)
+                response = StringMessage(data = "Session successfully removed from your wishlist!")
+            else:
+                raise endpoints.BadRequestException('This session is not in your wishlist')
 
         prof.put()
-        response = StringMessage(data = "Session successfully modified!")
         return response
 
     def _queryUserWishlist(self):
         """returns all urlsafe sessionKeysWishlist keys in a user's profile"""
         prof = self._getProfileFromUser()
         keys =  prof.sessionKeysWishlist
+        print "HI THERE" + str(keys[0])
         seshs = [ndb.Key(urlsafe=key).get() for key in keys]
         seshForms=[self._copySessionToForm(sesh) for sesh in seshs]
 
@@ -482,15 +512,15 @@ class ConferenceApi(remote.Service):
         # copy relevant fields from Profile to ProfileForm
         pf = ProfileForm()
         for field in pf.all_fields():
-            if hasattr(prof, field.name):
+            if hasattr(prof, field.name) and not field.name == 'conferenceKeysToAttend':
                 # convert t-shirt string to Enum; just copy others
                 if field.name == 'teeShirtSize':
                     setattr(pf, field.name, getattr(TeeShirtSize, getattr(prof, field.name)))
+
                 else:
                     setattr(pf, field.name, getattr(prof, field.name))
         pf.check_initialized()
         return pf
-
 
     def _getProfileFromUser(self):
         """Return user Profile from datastore, creating new one if non-existent."""
@@ -512,7 +542,6 @@ class ConferenceApi(remote.Service):
                 teeShirtSize = str(TeeShirtSize.NOT_SPECIFIED),
             )
             profile.put()
-
         return profile      # return Profile
 
     def _doProfile(self, save_request=None):
@@ -579,10 +608,11 @@ class ConferenceApi(remote.Service):
 
     @staticmethod
     def _cacheSpeaker(speaker):
-        spkr = ndb.Key(urlsafe=speaker).get()
-        seshs =[ ndb.Key(urlsafe=index).get().name for index in spkr.sessionKeysToAttend]
-        data = {'speaker':spkr.name, 'sessions':seshs}
-        memcache.set(spkr.name, data) 
+        seshs = Session.query()
+        seshs.filter(Session.speaker == speaker)
+        seshs = [index.name for index in seshs]
+        data = {'speaker':speaker, 'sessions':seshs}
+        memcache.set('verySecureKey', data)
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
             path='conference/announcement/get',
@@ -724,13 +754,6 @@ class ConferenceApi(remote.Service):
         """Returns all sessions with the specified type"""
         return self._querySessionsByConference(request)
 
-    @endpoints.method(SpeakerRegistrationForm, StringMessage,
-        path='regsiterSpeaker',
-        http_method='POST', name='regsiterSpeaker')
-    def registerSpeaker(self, request):
-        """Creates a new speaker entity in the database"""
-        return self._registerSpeakerProfile(request)
-
     @endpoints.method(MODIFY_SESSION_WHISHLIST_FORM, StringMessage,
         path='addSessionToWishlist',
         http_method='POST', name='addSessionToWishlist')
@@ -754,14 +777,54 @@ class ConferenceApi(remote.Service):
         response = SessionForms(sessions=self._queryUserWishlist())
         return response
 
-    @endpoints.method(SpeakerRegistrationForm, FeaturedSpeakerForm,
+    @endpoints.method(message_types.VoidMessage, FeaturedSpeakerForm,
         path='getFeaturedSpeaker',
         http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker(self, request):
         """Gets specified speaker from memcache if they feature in more than one session"""
-        spkr = memcache.get(request.name) #nothing is being cached
-        print spkr
+        spkr = memcache.get('verySecureKey') 
         response = FeaturedSpeakerForm(name=spkr.get('speaker'), sessions=spkr.get('sessions'))
         return response
+
+    @endpoints.method(SpeakerNameForm, FeaturedSpeakerForm,
+        path='getSessionsBySpeaker',
+        http_method='GET', name='getSessionsBySpeaker')
+    def getSessionsBySpeaker(self, request):
+        "returns all sessions with the specified speaker property"
+        return self._querySesssionsBySpeaker(request)
+
+    @endpoints.method(SessionTimeQueryForm, SessionForms,
+        path='getSessionsByTime',
+        http_method='GET', name='getSessionsByTime')
+    def getSessionsByTime(self, request):
+        "returns all sessions between 2 specified times"
+        return self._querySessionsByTime(request)
+
+    @endpoints.method(SessionDateQueryForm, SessionForms,
+        path='getSesssionsByDate',
+        http_method='GET', name='getSesssionsByDate')
+    def getSessionsByDate(self, request):
+        "returns all sessions between 2 specified dates"
+        return self._querySessionsByDate(request)
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+        path='randomQuery',
+        http_method='GET', name='randomQuery')
+    def randomQuery(self, request):
+        predefdTopics = {'workshop', 'lecture', 'party', 'meeting'}
+        predefdTopics = { index for index in predefdTopics if index != 'workshop'}
+
+        ancs = Conference.query(Conference.topics.IN(predefdTopics))
+
+        date = datetime(2016, 02, 14, 19, 0, 0) # random date, but specified time
+        results = []
+        for index in ancs:
+            seshs=Session.query(ancestor = index.key)
+            seshs=seshs.filter(Session.startTime <=  datetime.time(date))
+            for sesh in seshs:
+                results.append(sesh)
+        return SessionForms(sessions=[self._copySessionToForm(index) for index in results])
+
+
 
 api = endpoints.api_server([ConferenceApi]) # register API
