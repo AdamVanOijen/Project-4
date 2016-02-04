@@ -315,7 +315,7 @@ class ConferenceApi(remote.Service):
                 prof.sessionKeysWishlist.append(seshKey)
                 response = StringMessage(data = "Session successfully added to your wishlist!")
 
-            if not ndb.Key(urlsafe=seshKey).kind() == "Session":
+            elif not ndb.Key(urlsafe=seshKey).kind() == "Session":
                 raise endpoints.BadRequestException('key is not valid or is not of Session type')
 
             elif seshKey in prof.sessionKeysWishlist:
@@ -336,10 +336,8 @@ class ConferenceApi(remote.Service):
         """returns all urlsafe sessionKeysWishlist keys in a user's profile"""
         prof = self._getProfileFromUser()
         keys =  prof.sessionKeysWishlist
-        print "HI THERE" + str(keys[0])
         seshs = [ndb.Key(urlsafe=key).get() for key in keys]
         seshForms=[self._copySessionToForm(sesh) for sesh in seshs]
-
         return seshForms
 
     @ndb.transactional()
