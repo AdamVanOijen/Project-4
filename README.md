@@ -3,7 +3,7 @@ Project 4 Conference Central application
 To Run This Application Locally:
 
 	- download python google app engine SDK from here: https://cloud.google.com/appengine/downloads?hl=en
-	- run python2.7 path/to/google_appengine/appcfg.py path/to/Project-4
+	- run python2.7 path/to/google_appengine/dev_appserver.py path/to/Project-4
 	- go to http://localhost:8080 from your web browser
 
 To Run the Uploaded Version of This App:
