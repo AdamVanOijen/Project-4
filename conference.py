@@ -95,7 +95,7 @@ SESSION_QUERY_REQUESTT = endpoints.ResourceContainer(
     websafeConferenceKey=messages.StringField(1)
     )
 
-CREATE_SESSION_GET_REQUEST = endpoints.ResourceContainer(
+CREATE_SESSION_POST_REQUEST = endpoints.ResourceContainer(
     SessionForm,
     websafeConferenceKey=messages.StringField(1),
 )
@@ -750,7 +750,7 @@ class ConferenceApi(remote.Service):
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
 
-    @endpoints.method(CREATE_SESSION_GET_REQUEST, StringMessage,
+    @endpoints.method(CREATE_SESSION_POST_REQUEST, StringMessage,
         path ='createSession',
         http_method='POST', name='createSession')
     def createSession(self, request):
