@@ -55,6 +55,7 @@ from utils import getUserId
 
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
+MEMCACHE_SPEAKER_KEY = "verySecureKey"
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
@@ -107,6 +108,16 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
 MODIFY_SESSION_WHISHLIST_FORM = endpoints.ResourceContainer(
     message_types.VoidMessage,
     websafeSessionKey=messages.StringField(1)
+    )
+
+TIME_QUERY_GET_REQUEST = endpoints.ResourceContainer(
+    SessionTimeQueryForm,
+    websafeConferenceKey=messages.StringField(1),
+    )
+
+DATE_QUERY_GET_REQUEST = endpoints.ResourceContainer(
+    SessionDateQueryForm,
+    websafeConferenceKey=messages.StringField(1),
     )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -218,16 +229,11 @@ class ConferenceApi(remote.Service):
 
         Session(**data).put()
 
-        #adds speaker name and corresponding session names to memcache if speaker
-        #features in more than one session in a conference -- via the CacheSpeaker handler.
-
-        seshs = Session.query(ancestor=confKey)
-        seshs = seshs.filter(Session.speaker==data['speaker'])
-
-        if seshs.count() > 1:
-            taskqueue.add(params={'speaker': data['speaker']},
-                url='/tasks/cache_speaker/'
-            )
+        #adding TASK to taskque with params: speaker name and wsck. handler calls _cacheSpeaker.
+        memcache.delete(MEMCACHE_SPEAKER_KEY)
+        taskqueue.add(params={'speaker': data['speaker'], 
+            'websafeConferenceKey':request.websafeConferenceKey},
+            url='/tasks/cache_speaker/')
 
         response = StringMessage(data = "Session successfully created!")
         return response
@@ -252,7 +258,7 @@ class ConferenceApi(remote.Service):
 
     def _querySesssionsBySpeaker(self, request):
         "retrieves all sessions with a specified speaker property and returns them in Session Forms"
-        spkr=memcache.get('verySecureKey')
+        spkr=memcache.get(MEMCACHE_SPEAKER_KEY)
         if request.name == spkr.get('speaker'):
             response = FeaturedSpeakerForm(name=spkr.get('speaker'), sessions=spkr.get('sessions'))
         else:
@@ -264,24 +270,32 @@ class ConferenceApi(remote.Service):
 
     def _querySessionsByTime(self, request):
         "retrieves all sessions between 2 given times and returns them in sessionForms"
-        maxTime = datetime.time(datetime.strptime(request.maxTime, "%H:%M:%S"))
-        minTime = datetime.time(datetime.strptime(request.minTime, "%H:%M:%S"))
-        #maxTime = datetime.strptime(request.maxTime, "%H:%M:%S")
-        #minTime = datetime.strptime(request.minTime, "%H:%M:%S")
-
-        seshs=Session.query()
-        seshs=seshs.filter(Session.startTime > minTime)
-        seshs=seshs.filter(Session.startTime < maxTime)
+        try:
+            anc=ndb.Key(urlsafe=request.websafeConferenceKey)
+            seshs=Session.query(ancestor=anc)
+            maxTime = datetime.time(datetime.strptime(request.maxTime, "%H:%M:%S"))
+            minTime = datetime.time(datetime.strptime(request.minTime, "%H:%M:%S"))
+            seshs=seshs.filter(Session.startTime > minTime)
+            seshs=seshs.filter(Session.startTime < maxTime)
+        except:
+            #if no values specified or of wrong format, raise error
+            raise endpoints.BadRequestException(
+                "values must be specified and of format HH:MM:SS. must also provide websafe key")
 
         return SessionForms(sessions = [self._copySessionToForm(index) for index in seshs])
 
     def _querySessionsByDate(self, request):
         "retrieves all sessions between 2 given dates and returns them in sessionForms"
-        maxDate = datetime.strptime(request.maxDate, "%Y-%m-%d")
-        minDate = datetime.strptime(request.minDate, "%Y-%m-%d")
-
-        seshs = Session.query(ndb.AND(Session.date > minDate, Session.date < maxDate ))
-
+        try:
+            anc=ndb.Key(urlsafe=request.websafeConferenceKey)
+            seshs=Session.query(ancestor=anc)
+            maxDate = datetime.strptime(request.maxDate, "%Y-%m-%d")
+            minDate = datetime.strptime(request.minDate, "%Y-%m-%d")
+            seshs = seshs.filter(ndb.AND(Session.date > minDate, Session.date < maxDate ))
+        except:
+            #if no values specified or of wrong format, raise error
+            raise endpoints.BadRequestException(
+                "values must be specified and of format YYYY:MM:DD. must also provide websafe key")
         return SessionForms(sessions = [self._copySessionToForm(index) for index in seshs])
 
     def _copySessionToForm(self, session):
@@ -605,12 +619,18 @@ class ConferenceApi(remote.Service):
         return announcement
 
     @staticmethod
-    def _cacheSpeaker(speaker):
-        seshs = Session.query()
+    def _cacheSpeaker(request):
+        """Checks if provided speaker features in more than one session at the 
+        provided conference. If this is true, _cacheSpeaker adds the speaker's 
+        name and corresponding session names to memcache"""
+        speaker = request.get('speaker')
+        anc = ndb.Key(urlsafe=request.get('websafeConferenceKey'))
+        seshs = Session.query(ancestor=anc)
         seshs.filter(Session.speaker == speaker)
-        seshs = [index.name for index in seshs]
-        data = {'speaker':speaker, 'sessions':seshs}
-        memcache.set('verySecureKey', data)
+        if seshs.count() > 1:
+            seshs = [index.name for index in seshs]
+            data = {'speaker': speaker, 'sessions':seshs}
+            memcache.set(MEMCACHE_SPEAKER_KEY, data)
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
             path='conference/announcement/get',
@@ -780,7 +800,7 @@ class ConferenceApi(remote.Service):
         http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker(self, request):
         """Gets specified speaker from memcache if they feature in more than one session"""
-        spkr = memcache.get('verySecureKey') 
+        spkr = memcache.get(MEMCACHE_SPEAKER_KEY) 
         response = FeaturedSpeakerForm(name=spkr.get('speaker'), sessions=spkr.get('sessions'))
         return response
 
@@ -791,16 +811,16 @@ class ConferenceApi(remote.Service):
         "returns all sessions with the specified speaker property"
         return self._querySesssionsBySpeaker(request)
 
-    @endpoints.method(SessionTimeQueryForm, SessionForms,
-        path='getSessionsByTime',
-        http_method='GET', name='getSessionsByTime')
+    @endpoints.method(TIME_QUERY_GET_REQUEST, SessionForms,
+        path='getSessionsByTime/{websafeConferenceKey}',
+        http_method='POST', name='getSessionsByTime')
     def getSessionsByTime(self, request):
         "returns all sessions between 2 specified times"
         return self._querySessionsByTime(request)
 
-    @endpoints.method(SessionDateQueryForm, SessionForms,
-        path='getSesssionsByDate',
-        http_method='GET', name='getSesssionsByDate')
+    @endpoints.method(DATE_QUERY_GET_REQUEST, SessionForms,
+        path='getSesssionsByDate/{websafeConferenceKey}',
+        http_method='POST', name='getSesssionsByDate')
     def getSessionsByDate(self, request):
         "returns all sessions between 2 specified dates"
         return self._querySessionsByDate(request)
@@ -809,19 +829,15 @@ class ConferenceApi(remote.Service):
         path='randomQuery',
         http_method='GET', name='randomQuery')
     def randomQuery(self, request):
-        predefdTopics = {'workshop', 'lecture', 'party', 'meeting'}
-        predefdTopics = { index for index in predefdTopics if index != 'workshop'}
+        date = datetime(2016, 02, 14, 19, 0, 0)
+        sessions = Session.query(Session.startTime <=  datetime.time(date))
+        reqSessions = []
 
-        ancs = Conference.query(Conference.topics.IN(predefdTopics))
+        for index in sessions:
+            if index.typeOfSession != 'workshop':
+                reqSessions.append(index)
 
-        date = datetime(2016, 02, 14, 19, 0, 0) # random date, but specified time
-        results = []
-        for index in ancs:
-            seshs=Session.query(ancestor = index.key)
-            seshs=seshs.filter(Session.startTime <=  datetime.time(date))
-            for sesh in seshs:
-                results.append(sesh)
-        return SessionForms(sessions=[self._copySessionToForm(index) for index in results])
+        return SessionForms(sessions=[self._copySessionToForm(index) for index in reqSessions])
 
 
 

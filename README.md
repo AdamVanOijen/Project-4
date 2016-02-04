@@ -28,4 +28,4 @@ two query types added:
 
 The query problem:
 
-	 The problem with querying for sessions where the topic of the Conference does not equal 'workshop' and is before 7pm, is that there is no direct way to query for entities where a specified repeated property does not contain a specified value. One approach to getting around this problem would be predefine a set of possible values in a list and remove the specified value from the list, so that you can query for all Sessions whose ancestor's topic property contains values that are in that modified list of predefined values. I added an endpoint method at line 810 in conference.py that demonstrates this query.
+	 The problem with querying for sessions where the topic of the Conference does not equal 'workshop' and is before 7pm, is that you cannot you cannot use inequality operators for more than one property of an entity in a query. One way to work around this is to query by one property via. Session.query (in my case i queried by startTime), and then do further aggregation in python. I implimented this query as the endpoints method, randomQuery.

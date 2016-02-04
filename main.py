@@ -41,7 +41,7 @@ class SendConfirmationEmailHandler(webapp2.RequestHandler):
 
 class CacheSpeaker(webapp2.RequestHandler):
     def post(self):
-        ConferenceApi._cacheSpeaker(self.request.get('speaker'))
+        ConferenceApi._cacheSpeaker(self.request)
 
 
 app = webapp2.WSGIApplication([

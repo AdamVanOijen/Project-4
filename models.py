@@ -64,13 +64,17 @@ class Conference(ndb.Model):
     seatsAvailable  = ndb.IntegerProperty()
 
 class SpeakerNameForm(messages.Message):
+    """Inbound form containing a speaker's name"""
     name            = messages.StringField(1, required=True)
 
 class FeaturedSpeakerForm(messages.Message):
+    """outbound Form containing fields for Speaker name 
+    and corresponding Session names"""
     name            = messages.StringField(1)
     sessions        = messages.StringField(2, repeated=True)
 
 class Session(ndb.Model):
+    """Session -- Session object"""
     name            = ndb.StringProperty(required=True)
     startTime       = ndb.TimeProperty(required=True)
     speaker         = ndb.StringProperty(required=True)
@@ -79,6 +83,7 @@ class Session(ndb.Model):
     date            = ndb.DateProperty(required=True)
     highlights      = ndb.StringProperty(indexed=False)
 class SessionForm(messages.Message):
+    """ SessionForm -- Session outbound/inbound form message"""
     name            = messages.StringField(1)
     startTime       = messages.StringField(2, required=True)
     speaker         = messages.StringField(3, required=True)
@@ -89,6 +94,7 @@ class SessionForm(messages.Message):
     websafeKey      = messages.StringField(8)
 
 class SessionForms(messages.Message):
+    """Multiple outbound SessionForm messages """
     sessions = messages.MessageField(SessionForm, 1, repeated = True)
 
 class ConferenceForm(messages.Message):
@@ -139,12 +145,18 @@ class ConferenceQueryForms(messages.Message):
     filters = messages.MessageField(ConferenceQueryForm, 1, repeated=True)
 
 class SessionQueryForm(messages.Message):
+    """Inbound form containing a value corresponding to typeOfSession property of 
+    Session Object"""
     typeOfSession = messages.StringField(1, required=True)
 
 class SessionTimeQueryForm(messages.Message):
+    """inbound form specifying a segment of time in a day, defined by a max time and a 
+    minimum time """
     maxTime       = messages.StringField(1)
     minTime       = messages.StringField(2)
 
 class SessionDateQueryForm(messages.Message):
+    """Inbound form containing a segment of time, defined by a max date and a 
+    minimum date"""
     maxDate       = messages.StringField(1)
     minDate       = messages.StringField(2)

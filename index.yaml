@@ -98,4 +98,9 @@ indexes:
 - kind: Session
   ancestor: yes
   properties:
+  - name: date
+
+- kind: Session
+  ancestor: yes
+  properties:
   - name: startTime
