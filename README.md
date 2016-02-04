@@ -13,18 +13,19 @@
 ##Session/Speaker Implementation
 	 Sessions were implemented as entities in my application
 	
-	 Speakers were not implemnted as an entity/kind in my application. Speakers only exist as a string property within Session entities.
+	 Speakers were not implemnted as an entity/kind in my application.
+	 Speakers only exist as a string property within Session entities.
 
 	 If I implemented speakers as an entity/kind, I could store the
 	 corresponding session keys in a property, which would allow me to query
-	  sessions in the getSessionsBySpeaker handler by their key directly, but 
-	  the entity would only contain one property which seems unnecessary. 
-	  Since I implemented speakers as a string however, I have to create 
-	  indexes to query sessions by it's speaker property which makes my 
-	  application larger, but I thought that it would be better to have a 
-	  slightly larger application (the indexes aren't large since the query 
-	  only queries one property) than to create a whole new kind which only 
-	  consists of one property.
+	 sessions in the getSessionsBySpeaker handler by their key directly, but 
+	 the entity would only contain one property which seems unnecessary. 
+	 Since I implemented speakers as a string however, I have to create 
+	 indexes to query sessions by it's speaker property which makes my 
+	 application larger, but I thought that it would be better to have a 
+	 slightly larger application (the indexes aren't large since the query 
+	 only queries one property) than to create a whole new kind which only 
+	 consists of one property.
 
 ##Justification of Data Models
 	- the startTime and date properties in the Sessions kind are of type  
